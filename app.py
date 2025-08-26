@@ -159,23 +159,41 @@ def bytes_from_df(df: pd.DataFrame) -> BytesIO:
 # UI
 # ─────────────────────────────────────────────────────────────
 st.title("🧭 Industry → Category Mapper")
-st.caption("Upload a Beauhurst CSV. Get a clean mapped CSV + unmatched report. No code, no drama.")
+st.caption("Upload your Beauhurst CSV. We’ll add the company categories and give you two downloads. No coding required.")
 
-with st.expander("How it works", expanded=False):
-    st.markdown(
-        "- Supports a single **Industries** text column or multiple **Industries - X** boolean columns.\n"
-        "- Uses the **default mapping** (`mapping_default.csv`) in the repo, or upload a custom one.\n"
-        "- Outputs a mapped dataset and an unmatched industries report with fuzzy suggestions."
-    )
+with st.expander("How it works (60-second version)", expanded=True):
+    st.markdown("""
+**1) Upload your Beauhurst CSV.**  
+We accept either format:
+- **One column** named **Industries** with multiple items separated by commas (e.g., `Beauty and cosmetics, Online retailing`).  
+- **Many columns** beginning with **Industries - ...** where each column is TRUE/FALSE (e.g., `Industries - Online retailing`).
 
-# Mapping source controls
-use_default_mapping = st.checkbox("Use repository default mapping (mapping_default.csv)", value=True)
+**2) Category mapping (optional).**  
+If you don’t upload one, we use the **built-in mapping**.  
+A mapping is a simple CSV with one column **Industry** and additional columns for each category marked **True/False**.
+
+**3) Download your results.**  
+- **mapped_dataset.csv** – your original file plus the category columns.  
+- **unmatched_industries_report.csv** – any labels we couldn’t match (with suggestions).
+""")
+
+# Mapping source controls (friendlier labels)
+use_default_mapping = st.checkbox("Use built-in category mapping (mapping_default.csv)", value=True)
 uploaded_mapping = None
 if not use_default_mapping:
-    uploaded_mapping = st.file_uploader("Or upload a mapping CSV (must include 'Industry' + category columns)", type=["csv"])
+    uploaded_mapping = st.file_uploader("Or upload a category mapping CSV (has 'Industry' + one column per category with True/False)", type=["csv"])
+
+# Optional: let users grab the template mapping in one click
+try:
+    default_path_for_dl = resource_path_prefer_external("mapping_default.csv")
+    with open(default_path_for_dl, "rb") as _f:
+        st.download_button("Download mapping template (CSV)", data=_f.read(),
+                           file_name="mapping_template.csv", mime="text/csv")
+except Exception:
+    pass
 
 # Data file
-data_file = st.file_uploader("Upload Beauhurst dataset (CSV)", type=["csv"])
+data_file = st.file_uploader("Upload your Beauhurst dataset (CSV)", type=["csv"])
 
 # Fuzzy cutoff slider
 fuzzy_cutoff = st.slider("Fuzzy suggestion cutoff (higher = stricter)", 0.50, 0.95, 0.80, 0.01)
@@ -324,9 +342,9 @@ if data_file:
 else:
     st.info("Upload a Beauhurst CSV to begin. The default mapping will be used unless you upload another.")
 
-with st.expander("Tips", expanded=False):
+with st.expander("Help & tips", expanded=False):
     st.markdown(
-        "- If you see many unmatched labels, check for missing commas or odd spellings in the source.\n"
-        "- To update the default mapping for everyone, replace **mapping_default.csv** in the repo and redeploy (or use the upload override).\n"
-        "- If you later package this as an EXE, this app already prefers an external `mapping_default.csv` placed next to the executable."
+        "- If you see many **unmatched** labels, there may be missing commas or typos in the source file.\n"
+        "- To change categories for everyone, update **mapping_default.csv** in the repo (or upload your own mapping above).\n"
+        "- The app auto-detects your file format. If your file has columns like `Industries - <something>`, it will treat them as TRUE/FALSE industry flags."
     )
