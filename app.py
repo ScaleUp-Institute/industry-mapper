@@ -67,6 +67,26 @@ if APP_PW:
     st.sidebar.button("Log out", on_click=_logout)
 # --- end modal gate ---
 
+# Hide Streamlit's top toolbar, viewer badge, footer, and GitHub link
+def _hide_chrome():
+    st.markdown("""
+    <style>
+      /* Top-right toolbar: Share, GitHub, Rerun, etc. */
+      [data-testid="stToolbar"] {display: none !important;}
+      /* "Running in Streamlit" viewer badge */
+      .viewerBadge_container__r5tak, .viewerBadge_link__xq4xk,
+      .viewerBadge_slot__r4o9n {display: none !important;}
+      /* Footer */
+      footer {visibility: hidden !important;}
+      /* (Optional) Hide main menu in top left */
+      #MainMenu {visibility: hidden !important;}
+      /* Hide any direct GitHub anchor links if present */
+      a[href*="github.com"] {display: none !important;}
+    </style>
+    """, unsafe_allow_html=True)
+
+_hide_chrome()
+
 # ─────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────
