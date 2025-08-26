@@ -26,13 +26,46 @@ import streamlit as st
 
 st.set_page_config(page_title="Industry → Category Mapper", page_icon="🧭", layout="centered")
 
-# ─────────────────────────────────────────────────────────────
-# Optional password gate (set APP_PASSWORD in Streamlit secrets)
-# ─────────────────────────────────────────────────────────────
-if "APP_PASSWORD" in st.secrets:
-    pw = st.text_input("Enter app password", type="password")
-    if pw != st.secrets["APP_PASSWORD"]:
-        st.stop()
+# --- Modal password gate (with session state) ---
+APP_PW = st.secrets.get("APP_PASSWORD", "")
+
+def _logout():
+    st.session_state.pop("authed", None)
+    st.rerun()
+
+if APP_PW:
+    if "authed" not in st.session_state:
+        st.session_state["authed"] = False
+
+    if not st.session_state["authed"]:
+        if hasattr(st, "dialog"):  # use real modal if available
+            @st.dialog("Restricted access", width="small")
+            def password_modal():
+                st.write("Enter the app password to continue.")
+                pw = st.text_input("Password", type="password")
+                c1, c2 = st.columns([1,1])
+                with c1:
+                    if st.button("Continue", type="primary"):
+                        if pw == APP_PW:
+                            st.session_state["authed"] = True
+                            st.rerun()
+                        else:
+                            st.error("Incorrect password")
+                with c2:
+                    st.button("Cancel", on_click=st.stop)
+            password_modal()
+            st.stop()  # keep dialog in front until success
+        else:
+            # Fallback if your Streamlit version doesn't have st.dialog
+            pw = st.text_input("Enter app password", type="password")
+            if pw != APP_PW:
+                st.stop()
+            st.session_state["authed"] = True
+            st.rerun()
+
+    # Optional: logout button
+    st.sidebar.button("Log out", on_click=_logout)
+# --- end modal gate ---
 
 # ─────────────────────────────────────────────────────────────
 # Helpers
