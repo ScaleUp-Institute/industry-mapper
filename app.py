@@ -242,6 +242,29 @@ def uniq_preserve(seq):
             out.append(x); seen.add(x)
     return out
 
+def build_sector_summary(out_df: pd.DataFrame, company_col: str, category_columns: list, mode: str = "companies") -> pd.DataFrame:
+    """
+    mode = 'companies'    → denominator = unique companies in the dataset
+    mode = 'assignments'  → denominator = total True flags across all categories (shares sum to 100%)
+    """
+    # counts per category (unique companies with True)
+    counts = {cat: out_df.loc[out_df[cat] == True, company_col].nunique() for cat in category_columns}
+    counts_df = pd.DataFrame([
+        {"Category": cat, "Companies": counts[cat]} for cat in category_columns
+    ])
+
+    if mode == "assignments":
+        denom = sum(counts.values()) or 1
+    else:  # 'companies'
+        denom = out_df[company_col].nunique() or 1
+
+    counts_df["Share %"] = (counts_df["Companies"] / denom * 100).round(2)
+    # a “Companies per 100” metric can be handy when denominator is companies
+    if mode == "companies":
+        counts_df["Companies per 100"] = counts_df["Share %"].round(2)
+    return counts_df.sort_values(["Share %", "Companies"], ascending=[False, False]).reset_index(drop=True)
+
+
 
 # ─────────────────────────────────────────────────────────────
 # UI (clear copy)
@@ -397,6 +420,50 @@ if data_file:
                            aggfunc="any", fill_value=False)
               .reindex(columns=category_columns, fill_value=False)
     )
+
+  # ─────────────────────────────────────────────────────────────
+  # Sector percentages (table + chart + download)
+  # ─────────────────────────────────────────────────────────────
+  st.subheader("Sector coverage & percentages")
+  
+  mode = st.radio(
+      "Percentage mode",
+      options=["Companies (denominator = unique companies)", "Assignments (denominator = total category flags)"],
+      index=0,
+      horizontal=True
+  )
+  mode_key = "companies" if mode.startswith("Companies") else "assignments"
+  
+  summary_df = build_sector_summary(out_df, company_col, category_columns, mode=mode_key)
+  
+  # Optional: filter out tiny counts for readability
+  min_companies = st.slider("Hide sectors with fewer than N companies", 0, int(summary_df["Companies"].max() or 0), 0)
+  summary_view = summary_df[summary_df["Companies"] >= min_companies].copy()
+  
+  # Show table
+  st.dataframe(summary_view, use_container_width=True)
+  
+  # Bar chart (Share %)
+  chart_data = summary_view.set_index("Category")["Share %"]
+  st.bar_chart(chart_data)
+  
+  # Download summary
+  st.download_button(
+      "⬇️ Download sector summary (CSV)",
+      data=summary_df.to_csv(index=False),
+      file_name=f"sector_summary_{mode_key}.csv",
+      mime="text/csv"
+  )
+  
+  # Quick totals note
+  total_companies = out_df[company_col].nunique()
+  st.caption(
+      f"Total unique companies: **{total_companies}**. "
+      + (f"Sum of shares ≈ {summary_df['Share %'].sum():.2f}% (companies mode doesn’t force to 100; firms can span sectors)."
+         if mode_key == 'companies' else
+         "Shares sum to 100% (assignments mode).")
+  )
+
 
     # Build output
     out_df = df.copy()
