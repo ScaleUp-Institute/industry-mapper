@@ -421,51 +421,7 @@ if data_file:
               .reindex(columns=category_columns, fill_value=False)
     )
 
-  # ─────────────────────────────────────────────────────────────
-  # Sector percentages (table + chart + download)
-  # ─────────────────────────────────────────────────────────────
-  st.subheader("Sector coverage & percentages")
-  
-  mode = st.radio(
-      "Percentage mode",
-      options=["Companies (denominator = unique companies)", "Assignments (denominator = total category flags)"],
-      index=0,
-      horizontal=True
-  )
-  mode_key = "companies" if mode.startswith("Companies") else "assignments"
-  
-  summary_df = build_sector_summary(out_df, company_col, category_columns, mode=mode_key)
-  
-  # Optional: filter out tiny counts for readability
-  min_companies = st.slider("Hide sectors with fewer than N companies", 0, int(summary_df["Companies"].max() or 0), 0)
-  summary_view = summary_df[summary_df["Companies"] >= min_companies].copy()
-  
-  # Show table
-  st.dataframe(summary_view, use_container_width=True)
-  
-  # Bar chart (Share %)
-  chart_data = summary_view.set_index("Category")["Share %"]
-  st.bar_chart(chart_data)
-  
-  # Download summary
-  st.download_button(
-      "⬇️ Download sector summary (CSV)",
-      data=summary_df.to_csv(index=False),
-      file_name=f"sector_summary_{mode_key}.csv",
-      mime="text/csv"
-  )
-  
-  # Quick totals note
-  total_companies = out_df[company_col].nunique()
-  st.caption(
-      f"Total unique companies: **{total_companies}**. "
-      + (f"Sum of shares ≈ {summary_df['Share %'].sum():.2f}% (companies mode doesn’t force to 100; firms can span sectors)."
-         if mode_key == 'companies' else
-         "Shares sum to 100% (assignments mode).")
-  )
-
-
-    # Build output
+    # Build output  ✅ must come before sector summary
     out_df = df.copy()
     for cat in category_columns:
         if cat not in out_df.columns:
@@ -474,9 +430,56 @@ if data_file:
         if cat in has_cat.columns:
             out_df.loc[has_cat.index, cat] = has_cat[cat].astype(bool)
 
+    # ─────────────────────────────────────────────────────────────
+    # Sector percentages (table + chart + download)
+    # ─────────────────────────────────────────────────────────────
+    st.subheader("Sector coverage & percentages")
+
+    mode = st.radio(
+        "Percentage mode",
+        options=["Companies (denominator = unique companies)", "Assignments (denominator = total category flags)"],
+        index=0,
+        horizontal=True
+    )
+    mode_key = "companies" if mode.startswith("Companies") else "assignments"
+
+    summary_df = build_sector_summary(out_df, company_col, category_columns, mode=mode_key)
+
+    # Optional: filter out tiny counts for readability
+    min_companies = st.slider(
+        "Hide sectors with fewer than N companies",
+        0, int(summary_df["Companies"].max() or 0), 0
+    )
+    summary_view = summary_df[summary_df["Companies"] >= min_companies].copy()
+
+    # Show table
+    st.dataframe(summary_view, use_container_width=True)
+
+    # Bar chart (Share %)
+    chart_data = summary_view.set_index("Category")["Share %"]
+    st.bar_chart(chart_data)
+
+    # Download summary
+    st.download_button(
+        "⬇️ Download sector summary (CSV)",
+        data=summary_df.to_csv(index=False),
+        file_name=f"sector_summary_{mode_key}.csv",
+        mime="text/csv"
+    )
+
+    # Quick totals note
+    total_companies = out_df[company_col].nunique()
+    st.caption(
+        f"Total unique companies: **{total_companies}**. "
+        + (f"Sum of shares ≈ {summary_df['Share %'].sum():.2f}% (companies mode doesn’t force to 100; firms can span sectors)."
+           if mode_key == "companies" else
+           "Shares sum to 100% (assignments mode).")
+    )
+
     # Unmatched report (advisory suggestions)
     all_tokens = set(tmp["Industry_Clean"].dropna().unique())
     unmatched_tokens = sorted(all_tokens - mapped_tokens)
+
 
     unmatched_df = pd.DataFrame(columns=["Industry_Clean", "count", "sample_company", "suggested_mapping"])
     if unmatched_tokens:
