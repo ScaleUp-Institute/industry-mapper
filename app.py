@@ -430,6 +430,33 @@ if data_file:
         if cat in has_cat.columns:
             out_df.loc[has_cat.index, cat] = has_cat[cat].astype(bool)
 
+  # ─────────────────────────────────────────────────────────────
+    # IS8 Buzzword Overrides
+    # ─────────────────────────────────────────────────────────────
+    # Dictionary mapping the exact raw column name to your final category name.
+    # Note: Ensure the right-side values perfectly match the headers in your mapping_default.csv
+    buzzword_mapping = {
+        "Buzzwords - Advanced manufacturing": "Advanced manufacturing",
+        "Buzzwords - Clean energy": "Clean energy",
+        "Buzzwords - Creative industries": "Creative industries",
+        "Buzzwords - Digital and technologies": "Digital and technologies",
+        "Buzzwords - Financial services": "Financial services",
+        "Buzzwords - Life sciences": "Life sciences",
+        "Buzzwords - Professional and business services": "Professional and business services",
+        "Buzzwords - Defence": "Defence"
+    }
+
+    for bw_col, target_cat in buzzword_mapping.items():
+        # Case-insensitive column match just in case Beauhurst changes capitalization
+        actual_bw_col = next((c for c in out_df.columns if c.strip().lower() == bw_col.lower()), None)
+
+        if actual_bw_col and target_cat in category_columns:
+            # Parse the Beauhurst column (handles "Yes", "True", etc.)
+            is_buzzword_true = normalize_bool_series(out_df[actual_bw_col])
+            
+            # Apply override: If it was True from the initial mapping OR True from the Buzzword, keep it True
+            out_df[target_cat] = out_df[target_cat] | is_buzzword_true
+
     # ─────────────────────────────────────────────────────────────
     # Sector percentages (table + chart + download)
     # ─────────────────────────────────────────────────────────────
