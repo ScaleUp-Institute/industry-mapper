@@ -11,7 +11,7 @@ Uses mapping_default.csv by default (kept in the repo root).
 Users may override by uploading a different mapping CSV.
 
 Requirements:
-  streamlit, pandas, numpy
+  streamlit, pandas, numpy, openpyxl
 """
 
 import os
@@ -35,7 +35,7 @@ def _hide_chrome():
     st.markdown("""
     <style>
       [data-testid="stToolbar"] {display: none !important;}      /* top-right: Share/GitHub/etc */
-      #MainMenu {visibility: hidden !important;}                  /* hamburger menu */
+      #MainMenu {visibility: hidden !important;}                 /* hamburger menu */
       footer {visibility: hidden !important;}                     /* footer */
       .viewerBadge_container__r5tak, .viewerBadge_link__xq4xk,
       .viewerBadge_slot__r4o9n {display: none !important;}       /* viewer badge */
@@ -183,13 +183,20 @@ def detect_input_format(df: pd.DataFrame):
     wide = [c for c in df.columns if c.lower().startswith("industries - ")]
     return "wide" if wide else None
 
-
+# Helper for CSV download
 def bytes_from_df(df: pd.DataFrame) -> BytesIO:
     buf = BytesIO()
     df.to_csv(buf, index=False)
     buf.seek(0)
     return buf
 
+# NEW: Helper for Excel download
+def excel_bytes_from_df(df: pd.DataFrame) -> BytesIO:
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Data")
+    buf.seek(0)
+    return buf
 
 # NEW: capitalization-aware tokenizer for comma-separated cells
 def tokenize_by_caps(cell: str) -> list[str]:
@@ -265,7 +272,6 @@ def build_sector_summary(out_df: pd.DataFrame, company_col: str, category_column
     return counts_df.sort_values(["Share %", "Companies"], ascending=[False, False]).reset_index(drop=True)
 
 
-
 # ─────────────────────────────────────────────────────────────
 # UI (clear copy)
 # ─────────────────────────────────────────────────────────────
@@ -274,18 +280,15 @@ st.caption("Upload your Beauhurst CSV. We’ll add the company categories and gi
 
 with st.expander("How it works (60-second version)", expanded=True):
     st.markdown("""
-**1) Upload your Beauhurst CSV.**  
-We accept either format:
+**1) Upload your Beauhurst CSV.** We accept either format:
 - **One column** named **Industries** with multiple items (Beauhurst’s new format). We handle commas inside official names.
 - **Many columns** beginning with **Industries - ...** where each column is TRUE/FALSE.
 
-**2) Category mapping (optional).**  
-If you don’t upload one, we use the **built-in mapping** (`mapping_default.csv`).  
+**2) Category mapping (optional).** If you don’t upload one, we use the **built-in mapping** (`mapping_default.csv`).  
 A mapping is a simple CSV with one column **Industry** and additional columns for each category marked **True/False**.
 
-**3) Download your results.**  
-- **mapped_dataset.csv** – your original file plus the category columns.  
-- **unmatched_industries_report.csv** – any labels we couldn’t match (with suggestions).  
+**3) Download your results.** - **mapped_dataset** – your original file plus the category columns.  
+- **unmatched_industries_report** – any labels we couldn’t match (with suggestions).  
 *Note:* Suggestions are advisory only; we don’t auto-apply them.
 """)
 
@@ -501,7 +504,6 @@ if data_file:
     all_tokens = set(tmp["Industry_Clean"].dropna().unique())
     unmatched_tokens = sorted(all_tokens - mapped_tokens)
 
-
     unmatched_df = pd.DataFrame(columns=["Industry_Clean", "count", "sample_company", "suggested_mapping"])
     if unmatched_tokens:
         freq = (
@@ -536,19 +538,45 @@ if data_file:
     preview_cols += category_columns
     st.dataframe(out_df[preview_cols].head(20), use_container_width=True)
 
-    # Downloads
-    st.subheader("Download")
+    # ─────────────────────────────────────────────────────────────
+    # Downloads (Custom File Name and Format Selection)
+    # ─────────────────────────────────────────────────────────────
+    st.subheader("Download Options")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        custom_filename = st.text_input("File name prefix:", value="Beauhurst_Mapped")
+    with col2:
+        export_format = st.radio("Export format:", ["CSV", "Excel (.xlsx)"], horizontal=True)
+
+    # Prepare data payloads based on selected format
+    clean_out_df = out_df.drop(columns=["_ROW_ID"], errors="ignore")
+    
+    if export_format == "CSV":
+        mapped_data = bytes_from_df(clean_out_df)
+        unmatched_data = bytes_from_df(unmatched_df)
+        mapped_filename = f"{custom_filename}_dataset.csv"
+        unmatched_filename = f"{custom_filename}_unmatched.csv"
+        mime_type = "text/csv"
+    else:
+        mapped_data = excel_bytes_from_df(clean_out_df)
+        unmatched_data = excel_bytes_from_df(unmatched_df)
+        mapped_filename = f"{custom_filename}_dataset.xlsx"
+        unmatched_filename = f"{custom_filename}_unmatched.xlsx"
+        mime_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
     st.download_button(
-        "⬇️ Mapped dataset (CSV)",
-        data=bytes_from_df(out_df.drop(columns=["_ROW_ID"], errors="ignore")),
-        file_name="mapped_dataset.csv",
-        mime="text/csv"
+        f"⬇️ Download Mapped Dataset ({export_format})",
+        data=mapped_data,
+        file_name=mapped_filename,
+        mime=mime_type
     )
+    
     st.download_button(
-        "⬇️ Unmatched industries report (CSV)",
-        data=bytes_from_df(unmatched_df),
-        file_name="unmatched_industries_report.csv",
-        mime="text/csv",
+        f"⬇️ Download Unmatched Industries ({export_format})",
+        data=unmatched_data,
+        file_name=unmatched_filename,
+        mime=mime_type,
         disabled=unmatched_df.empty
     )
 
