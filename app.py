@@ -409,6 +409,27 @@ if data_file:
         melted["Industry_Clean"] = melted["col"].str.replace(r"(?i)^industries\s*-\s*", "", regex=True).map(clean_text)
         tmp = melted[["_ROW_ID", company_col, "Industry_Clean"]].copy()
 
+    # ─────────────────────────────────────────────────────────────
+    # Process Buzzword Columns as Additions
+    # ─────────────────────────────────────────────────────────────
+    buzzword_cols = [c for c in df.columns if c.lower().startswith("buzzwords - ")]
+    if buzzword_cols:
+        bw_wide = df[["_ROW_ID", company_col] + buzzword_cols].copy()
+        for c in buzzword_cols:
+            bw_wide[c] = normalize_bool_series(bw_wide[c])
+        
+        # Melt to long format, keeping only True values
+        bw_melted = bw_wide.melt(id_vars=["_ROW_ID", company_col], var_name="col", value_name="Flag")
+        bw_melted = bw_melted[bw_melted["Flag"] == True].copy()
+        
+        # Strip "Buzzwords - " from the column name and clean the text so it matches your mapping file
+        bw_melted["Industry_Clean"] = bw_melted["col"].str.replace(r"(?i)^buzzwords\s*-\s*", "", regex=True).map(clean_text)
+        
+        # Append these to the main 'tmp' dataframe. 
+        # The pivot_table(aggfunc='any') later in the script will naturally combine duplicates!
+        tmp = pd.concat([tmp, bw_melted[["_ROW_ID", company_col, "Industry_Clean"]]], ignore_index=True)
+    # ─────────────────────────────────────────────────────────────
+
     # Join to mapping → categories per row
     joined = tmp.merge(cat_long, on="Industry_Clean", how="left")
 
@@ -429,33 +450,6 @@ if data_file:
     for cat in category_columns:
         if cat in has_cat.columns:
             out_df.loc[has_cat.index, cat] = has_cat[cat].astype(bool)
-
-  # ─────────────────────────────────────────────────────────────
-    # IS8 Buzzword Overrides
-    # ─────────────────────────────────────────────────────────────
-    # Dictionary mapping the exact raw column name to your final category name.
-    # Note: Ensure the right-side values perfectly match the headers in your mapping_default.csv
-    buzzword_mapping = {
-        "Buzzwords - Advanced manufacturing": "Advanced manufacturing",
-        "Buzzwords - Clean energy": "Clean energy",
-        "Buzzwords - Creative industries": "Creative industries",
-        "Buzzwords - Digital and technologies": "Digital and technologies",
-        "Buzzwords - Financial services": "Financial services",
-        "Buzzwords - Life sciences": "Life sciences",
-        "Buzzwords - Professional and business services": "Professional and business services",
-        "Buzzwords - Defence": "Defence"
-    }
-
-    for bw_col, target_cat in buzzword_mapping.items():
-        # Case-insensitive column match just in case Beauhurst changes capitalization
-        actual_bw_col = next((c for c in out_df.columns if c.strip().lower() == bw_col.lower()), None)
-
-        if actual_bw_col and target_cat in category_columns:
-            # Parse the Beauhurst column (handles "Yes", "True", etc.)
-            is_buzzword_true = normalize_bool_series(out_df[actual_bw_col])
-            
-            # Apply override: If it was True from the initial mapping OR True from the Buzzword, keep it True
-            out_df[target_cat] = out_df[target_cat] | is_buzzword_true
 
     # ─────────────────────────────────────────────────────────────
     # Sector percentages (table + chart + download)
