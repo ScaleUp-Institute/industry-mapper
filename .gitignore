@@ -1,0 +1,10 @@
+# Local environment
+.venv/
+__pycache__/
+*.pyc
+
+# Streamlit local secrets - never commit
+.streamlit/secrets.toml
+
+# Claude Code local config
+.claude/
